@@ -290,6 +290,12 @@ updateClock(RunTimeOpts * rtOpts, PtpClock * ptpClock)
 {
 	Integer32 adj;
 	TimeInternal timeTmp;
+  DWORD oldTimeAdj;
+  DWORD timeIncr;
+  BOOL dis = FALSE;
+  GetSystemTimeAdjustment(&oldTimeAdj, &timeIncr, &dis);
+  Integer32 incrFrequBetweenSync = pow(2, rtOpts->syncInterval);
+  incrFrequBetweenSync = incrFrequBetweenSync * 10000000 / timeIncr;
 
 	DBGV("updateClock\n");
 
@@ -319,12 +325,16 @@ updateClock(RunTimeOpts * rtOpts, PtpClock * ptpClock)
 				subTime(&timeTmp, &timeTmp, 
 					&ptpClock->offsetFromMaster);
 				setTime(&timeTmp);
+        /*Set Incremetnfactor as Adjustment to start off clean*/
+        adjFreq(timeIncr);
 				initClock(rtOpts, ptpClock);
 			} else {
 #if !defined(__APPLE__)
 				adj = ptpClock->offsetFromMaster.nanoseconds
 					> 0 ? ADJ_FREQ_MAX : -ADJ_FREQ_MAX;
-				adjFreq(-adj);
+        adj = adj / incrFrequBetweenSync / 100;
+        adj = timeIncr - adj;
+				adjFreq(adj);
 #endif /* __APPLE__ */
 			}
 		}
@@ -350,12 +360,15 @@ updateClock(RunTimeOpts * rtOpts, PtpClock * ptpClock)
 		adj = ptpClock->offsetFromMaster.nanoseconds / rtOpts->ap + 
 			ptpClock->observed_drift;
 
+    adj = adj / incrFrequBetweenSync / 100;
+    adj = timeIncr - adj;
+
 		/* apply controller output as a clock tick rate adjustment */
 		if (!rtOpts->noAdjust)
 #if defined(__APPLE__)
 			adjTime(ptpClock->offsetFromMaster.nanoseconds);
 #else
-			adjFreq(-adj);
+			adjFreq(adj);
 #endif /* __APPLE__ */
 	}
 
